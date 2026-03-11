@@ -1,0 +1,7 @@
+task_id,category,mode,latency_seconds,total_tokens,estimated_cost_usd,quality_score
+reasoning_hard,Reasoning,Baseline,156.47,45060,0.06741,9
+reasoning_hard,Reasoning,MoA-4,205.81,10295,0.01044,9
+reasoning_hard,Reasoning,MoA-8,193.17,18421,0.01811,9
+coding_hard,Coding,Baseline,45.46,7217,0.01076,7
+coding_hard,Coding,MoA-4,106.04,28060,0.02962,8
+coding_hard,Coding,MoA-8,135.21,58134,0.05937,8
