@@ -1,7 +1,7 @@
 import os
 import time
 import sys
-import pandas as pd
+import csv
 from datasets import load_dataset
 from tqdm import tqdm
 from self_moa_pipeline import get_client, MODEL
@@ -108,18 +108,35 @@ def main():
         })
 
     # 3. تحليل النتائج النهائية
-    df = pd.DataFrame(results)
-    
+    total_samples = len(results)
+    if total_samples > 0:
+        baseline_acc = (sum(r["Baseline_Correct"] for r in results) / total_samples) * 100
+        moa4_acc = (sum(r["MoA4_Correct"] for r in results) / total_samples) * 100
+        baseline_lat = sum(r["Baseline_Latency"] for r in results) / total_samples
+        moa4_lat = sum(r["MoA4_Latency"] for r in results) / total_samples
+        baseline_cost = sum(r["Baseline_Cost"] for r in results)
+        moa4_cost = sum(r["MoA4_Cost"] for r in results)
+    else:
+        baseline_acc, moa4_acc, baseline_lat, moa4_lat, baseline_cost, moa4_cost = 0, 0, 0, 0, 0, 0
+
     print("\n" + "*"*30 + " FINAL REPORT " + "*"*30)
-    print(f"✅ Baseline Accuracy: {df['Baseline_Correct'].mean() * 100:.2f}%")
-    print(f"🚀 Self-MoA-4 Accuracy: {df['MoA4_Correct'].mean() * 100:.2f}%")
+    print(f"✅ Baseline Accuracy: {baseline_acc:.2f}%")
+    print(f"🚀 Self-MoA-4 Accuracy: {moa4_acc:.2f}%")
     print("-" * 60)
-    print(f"⏱️ Average Latency -> Baseline: {df['Baseline_Latency'].mean():.2f}s | Self-MoA-4: {df['MoA4_Latency'].mean():.2f}s")
-    print(f"💸 Total Cost -> Baseline: ${df['Baseline_Cost'].sum():.4f} | Self-MoA-4: ${df['MoA4_Cost'].sum():.4f}")
+    print(f"⏱️ Average Latency -> Baseline: {baseline_lat:.2f}s | Self-MoA-4: {moa4_lat:.2f}s")
+    print(f"💸 Total Cost -> Baseline: ${baseline_cost:.4f} | Self-MoA-4: ${moa4_cost:.4f}")
     
     # حفظ في ملف
-    df.to_csv("mmlu_evaluation_results.csv", index=False)
-    print("💾 Detailed results saved to 'mmlu_evaluation_results.csv'")
+    try:
+        csv_filename = "mmlu_evaluation_results.csv"
+        with open(csv_filename, mode='w', newline='', encoding='utf-8') as f:
+            if results:
+                writer = csv.DictWriter(f, fieldnames=results[0].keys())
+                writer.writeheader()
+                writer.writerows(results)
+        print(f"💾 Detailed results saved to '{csv_filename}'")
+    except Exception as e:
+        print(f"Error saving CSV: {e}")
 
 if __name__ == "__main__":
     main()
