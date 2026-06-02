@@ -1,17 +1,19 @@
 import os
 import re
 import json
+import sys
 import matplotlib.pyplot as plt
 import numpy as np
-from openai import OpenAI
+from self_moa_pipeline import get_client, MODEL
+
+# Force UTF-8 encoding for standard output to support emojis/Arabic in Windows terminal
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # تهيئة العميل للاتصال بـ OpenRouter
-client = OpenAI(
-    base_url=os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1"),
-    api_key=os.environ.get("OPENAI_API_KEY", "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"),
-)
+client = get_client()
 
-JUDGE_MODEL = "anthropic/claude-opus-4.6" # يمكنك العودة إلى qwen إذا أردت تقليل التكلفة
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL", MODEL) # Default to dynamic Qwen model to save cost, can be overridden
 
 def evaluate_and_chart(file_path="benchmark_results.md"):
     print("⚖️ Initiating LLM-as-a-Judge with Visual Analytics...")

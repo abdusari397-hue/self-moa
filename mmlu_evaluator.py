@@ -1,16 +1,18 @@
 import os
 import time
+import sys
 import pandas as pd
 from datasets import load_dataset
-from openai import OpenAI
 from tqdm import tqdm
+from self_moa_pipeline import get_client, MODEL
+
+# Force UTF-8 encoding for standard output to support emojis/Arabic in Windows terminal
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # --- الإعدادات الأساسية لـ Qwen 3.5 ---
-API_KEY = os.environ.get("OPENAI_API_KEY", "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")
-BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1") 
-MODEL_NAME = "qwen/qwen3.5-flash-02-23" 
-
-client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+client = get_client()
+MODEL_NAME = os.environ.get("OPENAI_MODEL", MODEL)
 
 def call_qwen(prompt, temperature=0.0, n=1):
     """دالة الاتصال بـ Qwen لتوليد الردود"""

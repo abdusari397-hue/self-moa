@@ -1,14 +1,15 @@
 import os
 import argparse
-from openai import OpenAI
-from self_moa_pipeline import generate_drafts, aggregate_drafts
+import sys
+from self_moa_pipeline import generate_drafts, aggregate_drafts, get_client
 
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY", "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"),
-    base_url=os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1") 
-)
+# Force UTF-8 encoding for standard output to support emojis/Arabic in Windows terminal
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding='utf-8')
 
-CLAUDE_OPUS_MODEL = "anthropic/claude-opus-4.6" # Standard OpenRouter Opus tag
+client = get_client()
+
+CLAUDE_OPUS_MODEL = os.environ.get("BENCHMARK_MODEL", "anthropic/claude-3-opus")
 
 HARD_LOGIC_QUESTIONS = [
     {

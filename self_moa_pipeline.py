@@ -5,21 +5,30 @@ import sys
 from openai import OpenAI
 from typing import List, Optional
 
-# Initialize API connection
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY", "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"),
-    base_url=os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1") 
-)
+# Force UTF-8 encoding for standard output to support emojis/Arabic in Windows terminal
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding='utf-8')
 
+# Default client configuration
+DEFAULT_API_KEY = "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"
+DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 MODEL = "qwen/qwen3.5-flash-02-23"
+
+def get_client(api_key: Optional[str] = None, base_url: Optional[str] = None) -> OpenAI:
+    """Helper to initialize the OpenAI client with fallback configuration"""
+    key = api_key or os.environ.get("OPENAI_API_KEY", DEFAULT_API_KEY)
+    url = base_url or os.environ.get("OPENAI_BASE_URL", DEFAULT_BASE_URL)
+    return OpenAI(api_key=key, base_url=url)
 
 # --- [Stage 1]: Unifying Roles ---
 
-def generate_single_draft(prompt: str, temperature: float = 0.7) -> str:
+def generate_single_draft(prompt: str, temperature: float = 0.7, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None) -> str:
     """Generate a single draft from the model"""
+    active_model = model or MODEL
+    active_client = get_client(api_key, base_url)
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
+        response = active_client.chat.completions.create(
+            model=active_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
         )
@@ -27,23 +36,30 @@ def generate_single_draft(prompt: str, temperature: float = 0.7) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-def generate_drafts(prompt: str, num_drafts: int = 6, temperatures: List[float] = None) -> List[str]:
+def generate_drafts(prompt: str, num_drafts: int = 6, temperatures: List[float] = None, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None) -> List[str]:
     """
     Stage 2: In-model Diversity via Temperature Scaling
-    Generates 6 drafts total: 1 baseline draft at temperature 0.0, and 5 drafts at temperature 0.7.
+    Generates a dynamic number of drafts. The first draft is baseline at temperature 0.0,
+    and subsequent drafts are scaled using the provided temperatures.
     """
-    # Force num_drafts to 6 and temperatures to [0.7] based on user request
-    num_drafts = 6
-    temperatures = [0.7]
+    if temperatures is None or len(temperatures) == 0:
+        temperatures = [0.7]
         
     drafts = []
-    print(f"📌 Generating {num_drafts} drafts concurrently. (1 Baseline at Temp 0.0, 5 at Temp 0.7)...")
+    print(f"📌 Generating {num_drafts} drafts concurrently...")
     
-    # First draft is the baseline (0.0), the next 5 are 0.7
-    tasks = [0.0] + [0.7] * 5
+    # 1 Baseline draft at 0.0, and the remaining (num_drafts - 1) distributed among the temperatures list
+    tasks = [0.0]
+    if num_drafts > 1:
+        for i in range(num_drafts - 1):
+            temp_idx = i % len(temperatures)
+            tasks.append(temperatures[temp_idx])
+            
+    tasks = tasks[:num_drafts]
+    print(f"   -> Draft temperatures: {tasks}")
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_drafts) as executor:
-        futures = {executor.submit(generate_single_draft, prompt, temp): temp for temp in tasks}
+        futures = {executor.submit(generate_single_draft, prompt, temp, api_key, base_url, model): temp for temp in tasks}
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
             if not result.startswith("Error:"):
@@ -53,12 +69,15 @@ def generate_drafts(prompt: str, num_drafts: int = 6, temperatures: List[float] 
                 
     return drafts
 
-def aggregate_drafts(prompt: str, drafts: List[str], criteria: Optional[str] = None) -> str:
+def aggregate_drafts(prompt: str, drafts: List[str], criteria: Optional[str] = None, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None) -> str:
     """
     Stage 3: Single Pass Aggregation & In-Context Reasoning
     Sends all drafts in a single massive context window to act as a Critical Judge.
     """
     print(f"🔄 Performing Single Pass Aggregation on {len(drafts)} drafts (Context Window Processing)...")
+    
+    active_model = model or MODEL
+    active_client = get_client(api_key, base_url)
     
     aggregation_prompt = f"Original User Prompt:\n{prompt}\n\nHere are {len(drafts)} proposed solutions to answer this prompt:\n"
     for i, draft in enumerate(drafts, 1):
@@ -72,8 +91,8 @@ def aggregate_drafts(prompt: str, drafts: List[str], criteria: Optional[str] = N
         system_content += f"\n\nCRITICAL EVALUATION CRITERIA YOU MUST FOLLOW WHEN SYNTHESIZING:\n{criteria}"
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
+        response = active_client.chat.completions.create(
+            model=active_model,
             messages=[
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": aggregation_prompt}
@@ -112,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--temperatures", type=float, nargs='+', default=[0.7, 0.9], help="List of temperatures to scale diversity across drafts.")
     parser.add_argument("--criteria", type=str, default="Ensure the response is accurate, complete, concise, well-formatted in Markdown, and directly addresses the user's prompt without unnecessary conversational padding. Analyze contradictions in the provided drafts carefully.", help="Specific evaluation criteria to instruct the aggregator.")
 
-    args = parser.add_argument_args = parser.parse_args()
+    args = parser.parse_args()
 
     # If prompt is not passed via CLI argument, use a default example or ask for input
     user_prompt = args.prompt
