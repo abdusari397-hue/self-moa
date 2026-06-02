@@ -1,9 +1,21 @@
 import streamlit as st
 import time
 import os
-import pandas as pd
+import csv
 import subprocess
 from self_moa_pipeline import generate_drafts, aggregate_drafts, MODEL, DEFAULT_API_KEY, DEFAULT_BASE_URL
+
+def load_csv_data(filepath):
+    """Safely loads a CSV file into a list of dictionaries in pure Python to avoid DLL blockages"""
+    if not os.path.exists(filepath):
+        return []
+    try:
+        with open(filepath, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            return list(reader)
+    except Exception as e:
+        st.error(f"Error reading {filepath}: {e}")
+        return []
 
 # Set premium page layout and configuration
 st.set_page_config(
@@ -369,21 +381,30 @@ with tab2:
     csv_tab_1, csv_tab_2 = st.tabs(["Logic Evaluation Results", "MMLU Automated Results"])
     
     with csv_tab_1:
-        if os.path.exists("evaluation_results.csv"):
-            df_logic = pd.read_csv("evaluation_results.csv")
-            st.dataframe(df_logic, use_container_width=True)
+        logic_data = load_csv_data("evaluation_results.csv")
+        if logic_data:
+            st.dataframe(logic_data, use_container_width=True)
         else:
             st.info("No logic evaluation history found. File 'evaluation_results.csv' is empty.")
             
     with csv_tab_2:
-        if os.path.exists("mmlu_evaluation_results.csv"):
-            df_mmlu = pd.read_csv("mmlu_evaluation_results.csv")
-            st.dataframe(df_mmlu, use_container_width=True)
+        mmlu_data = load_csv_data("mmlu_evaluation_results.csv")
+        if mmlu_data:
+            st.dataframe(mmlu_data, use_container_width=True)
             
-            # Simple summary metrics
-            c1, c2 = st.columns(2)
-            c1.metric("Baseline Avg Latency", f"{df_mmlu['Baseline_Latency'].mean():.2f} s")
-            c2.metric("Self-MoA Avg Latency", f"{df_mmlu['MoA4_Latency'].mean():.2f} s")
+            # Simple summary metrics calculated in pure Python
+            try:
+                base_latencies = [float(row["Baseline_Latency"]) for row in mmlu_data if "Baseline_Latency" in row and row["Baseline_Latency"]]
+                moa_latencies = [float(row["MoA4_Latency"]) for row in mmlu_data if "MoA4_Latency" in row and row["MoA4_Latency"]]
+                
+                avg_base = sum(base_latencies) / len(base_latencies) if base_latencies else 0.0
+                avg_moa = sum(moa_latencies) / len(moa_latencies) if moa_latencies else 0.0
+                
+                c1, c2 = st.columns(2)
+                c1.metric("Baseline Avg Latency", f"{avg_base:.2f} s")
+                c2.metric("Self-MoA Avg Latency", f"{avg_moa:.2f} s")
+            except Exception as e:
+                st.warning(f"Could not compute average metrics: {e}")
         else:
             st.info("No MMLU automated history found. File 'mmlu_evaluation_results.csv' is empty.")
 
